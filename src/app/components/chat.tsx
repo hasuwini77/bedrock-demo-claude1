@@ -1,74 +1,72 @@
-// src/app/components/Chat.tsx
 "use client";
-
+// src/app/components/Chat.tsx
 import { useState } from "react";
-
-interface BedrockResponse {
-  content: Array<{
-    type: string;
-    text: string;
-  }>;
-}
 
 export default function Chat() {
   const [prompt, setPrompt] = useState("");
   const [response, setResponse] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (!prompt.trim()) return;
+
+    setIsLoading(true);
+    setResponse(""); // Clear previous response
 
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
       });
 
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
+      if (!res.ok) throw new Error("Failed to fetch response");
+
+      // Handle streaming response
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No reader available");
+
+      // Read the stream
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Convert the chunk to text and append to response
+        const text = new TextDecoder().decode(value);
+        setResponse((prev) => prev + text);
       }
-
-      const data = await res.json();
-      console.log("Raw response:", data);
-
-      // Extract the text from the content array
-      const responseText = data.content[0].text;
-      console.log("Extracted text:", responseText);
-
-      setResponse(responseText);
     } catch (error) {
       console.error("Error:", error);
-      setResponse("Error occurred while fetching response");
+      setResponse("Sorry, something went wrong. Please try again.");
     } finally {
-      setLoading(false);
+      setIsLoading(false);
+      setPrompt("");
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4">
+    <div className="p-4 max-w-2xl mx-auto bg-gray-600">
       <form onSubmit={handleSubmit} className="space-y-4">
         <textarea
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          className="w-full p-2 border border-gray-300 text-black rounded"
+          placeholder="Ask your question..."
+          className="w-full p-2 border rounded  bg-gray-700"
           rows={4}
-          placeholder="Enter your prompt..."
         />
         <button
           type="submit"
-          disabled={loading}
+          disabled={isLoading}
           className="px-4 py-2 bg-blue-500 text-white rounded disabled:bg-gray-400"
         >
-          {loading ? "Generating..." : "Generate"}
+          {isLoading ? "Thinking..." : "Send"}
         </button>
       </form>
+
       {response && (
-        <div className="mt-4 p-4 border border-gray-300 rounded bg-white text-black">
-          <pre className="whitespace-pre-wrap">{response}</pre>
+        <div className="mt-4 p-4 border rounded bg-gray-700">
+          <p className="whitespace-pre-wrap">{response}</p>
         </div>
       )}
     </div>
